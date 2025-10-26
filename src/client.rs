@@ -23,8 +23,13 @@ impl Client {
             .build()
             .unwrap();
 
+        let mut base_url = base_url.to_owned();
+        if let Some(stripped) = base_url.strip_suffix("/") {
+            base_url = stripped.to_owned();
+        }
+
         Client {
-            base_url: base_url.to_string(),
+            base_url,
             server_name: server_name.to_string(),
             http_client,
         }
