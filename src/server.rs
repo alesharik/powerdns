@@ -56,10 +56,9 @@ impl<'a> ServerClient<'a> {
             .http_client
             .get(format!("{}/api/v1/servers", self.api_client.base_url))
             .send()
-            .await
-            .unwrap();
+            .await?;
         if resp.status().is_success() {
-            Ok(resp.json::<Vec<Server>>().await.unwrap())
+            Ok(resp.json::<Vec<Server>>().await?)
         } else {
             Err(resp.json::<PowerDNSResponseError>().await?)?
         }
@@ -91,10 +90,9 @@ impl<'a> ServerClient<'a> {
                 self.api_client.base_url
             ))
             .send()
-            .await
-            .unwrap();
+            .await?;
         if resp.status().is_success() {
-            Ok(resp.json::<Server>().await.unwrap())
+            Ok(resp.json::<Server>().await?)
         } else {
             Err(resp.json::<PowerDNSResponseError>().await?)?
         }

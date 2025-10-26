@@ -163,8 +163,7 @@ impl<'a> ZoneClient<'a> {
                 self.api_client.base_url, self.api_client.server_name
             ))
             .send()
-            .await
-            .unwrap();
+            .await?;
 
         if resp.status().is_success() {
             Ok(resp.json::<Vec<Zone>>().await?)
@@ -184,8 +183,7 @@ impl<'a> ZoneClient<'a> {
                 self.api_client.base_url, self.api_client.server_name
             ))
             .send()
-            .await
-            .unwrap();
+            .await?;
 
         if resp.status().is_success() {
             Ok(resp.json::<Zone>().await?)
@@ -205,8 +203,7 @@ impl<'a> ZoneClient<'a> {
                 self.api_client.base_url, self.api_client.server_name
             ))
             .send()
-            .await
-            .unwrap();
+            .await?;
 
         if resp.status().is_success() {
             Ok(())
