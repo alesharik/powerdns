@@ -73,6 +73,36 @@ pub enum ZoneKind {
 }
 
 
+/// A CreateZone object represents requesst to create authoritative DNS Zone.
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[serde_with::skip_serializing_none]
+pub struct CreateZone {
+    /// Name of the zone (e.g. “example.com.”) MUST have a trailing dot
+    pub name: Option<String>,
+    /// Zone kind, one of “Native”, “Master”, “Slave”
+    pub kind: Option<ZoneKind>,
+    /// List of IP addresses configured as a master for this zone (“Slave” type
+    /// zones only)
+    pub masters: Option<Vec<String>>,
+    /// Whether or not the zone uses NSEC3 narrow
+    pub nsec3narrow: Option<bool>,
+    /// Whether or not the zone is pre-signed
+    pub presigned: Option<bool>,
+    /// The SOA-EDIT metadata item
+    pub soa_edit: Option<String>,
+    /// The SOA-EDIT-API metadata item
+    pub soa_edit_api: Option<String>,
+    /// MAY contain a BIND-style zone file when creating a zone
+    pub zone: Option<String>,
+    /// MAY be set. Its value is defined by local policy
+    pub account: Option<String>,
+    /// MAY be sent in client bodies during creation, and MUST NOT be sent by
+    /// the server. Simple list of strings of nameserver names, including the
+    /// trailing dot. Not required for slave zones.
+    pub nameservers: Option<Vec<String>>,
+}
+
+
 /// PatchZones used to create zones with PATCH method.
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct PatchZone {
@@ -241,6 +271,37 @@ impl<'a> ZoneClient<'a> {
             status => Err(Error::UnexpectedStatusCode(status)),
         }
     }
+
+
+    /// Patches zone, by assigning new rrsets to this zone.
+    pub async fn create(&self, zone: CreateZone) -> Result<Zone, Error> {
+        let response = self
+            .api_client
+            .http_client
+            .post(
+                format!("{}/api/v1/servers/{}/zones",
+                        self.api_client.base_url,
+                        self.api_client.server_name,
+                ))
+            .json(&zone)
+            .send()
+            .await?;
+
+        match response.status() {
+            // 201 Created – A zone Returns: Zone object
+            // 400 Bad Request – The supplied request was not valid Returns: Error object
+            // 404 Not Found – Requested item was not found Returns: Error object
+            // 422 Unprocessable Entity – The input to the operation was not valid Returns: Error object
+            // 500 Internal Server Error – Internal server error Returns: Error object
+
+            StatusCode::CREATED => Ok(response.json::<Zone>().await?),
+            StatusCode::BAD_REQUEST | StatusCode::NOT_FOUND |
+            StatusCode::UNPROCESSABLE_ENTITY | StatusCode::INTERNAL_SERVER_ERROR => {
+                Err(Error::PowerDNS(response.json().await?))
+            },
+            status => Err(Error::UnexpectedStatusCode(status)),
+        }
+    }
 }
 
 /// Ensure a domain is canonical and top-level
@@ -285,3 +346,51 @@ mod tests {
         assert_eq!(root, "doc.powerdns.com.")
     }
 }
+
+
+#[cfg(test)]
+mod itests {
+    use crate::client::Client;
+    use dotenvy::dotenv;
+    use std::env;
+    use crate::zones::{CreateZone, ZoneKind};
+
+    fn generate_random_domain() -> String {
+        use rand::Rng;
+
+        rand::rng()
+            .sample_iter(&rand::distr::Alphanumeric)
+            .take(32)
+            .map(char::from)
+            .collect::<String>()
+            .to_lowercase()
+    }
+
+    #[tokio::test]
+    async fn create() {
+        dotenv().ok();
+        let client = Client::new(
+            &env::var("PDNS_HOST").unwrap_or_else(|_| String::from("http://localhost:8081")),
+            &env::var("PDNS_SERVER").unwrap_or_else(|_| String::from("localhost")),
+            &env::var("PDNS_API_KEY").unwrap(),
+        );
+
+        let name = format!("{}.com.", generate_random_domain());
+
+        let new_zone = client.zone().create(CreateZone {
+            name: Some(name.clone()),
+            kind: Some(ZoneKind::Master),
+            masters: None,
+            nsec3narrow: None,
+            presigned: None,
+            soa_edit: None,
+            soa_edit_api: None,
+            zone: None,
+            account: None,
+            nameservers: None,
+        }).await.unwrap();
+
+        assert_eq!(new_zone.name, Some(name));
+    }
+}
+
